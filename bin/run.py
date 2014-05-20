@@ -10,12 +10,11 @@ import time
 import urllib2
 import random
 
-cli = argparse.ArgumentParser(description='Utility for mounting or unmounting a volume.')
+cli = argparse.ArgumentParser(description='Utility for attaching or detaching a volume on AWS.')
 cli.add_argument('action', help='Action to perform (i.e. attach, detach)')
 cli.add_argument('volumeid', help='Volume ID (e.g. vol-abcd1234)')
-cli.add_argument('--remap-device', help='Remap AWS device to a local name')
 cli.add_argument('--env-file', help='Write mount environment variables file')
-cli.add_argument('--env-prefix', help='Prefix for mount environment variables', default='MOUNT_')
+cli.add_argument('--env-prefix', help='Prefix for mount environment variables', default='VOLUME_')
 cli.add_argument('--verbose', '-v', action='count', help='Use multiple times to increase verbosity: none = quiet, 1 = completions, 2 = summaries, 3 = details')
 
 cliargs = cli.parse_args()
@@ -25,35 +24,21 @@ cliargs = cli.parse_args()
 # setup our basics
 #
 
-devices = [
-  '/dev/sdf',
-  '/dev/sdg',
-  '/dev/sdh',
-  '/dev/sdi',
-  '/dev/sdj',
-  '/dev/sdk',
-  '/dev/sdl',
-  '/dev/sdm',
-  '/dev/sdn',
-  '/dev/sdo',
-  '/dev/sdp',
-]
-
-devicesRemap = {
-  'ubuntu' : {
-    '/dev/sdf' : '/dev/xvdf',
-    '/dev/sdg' : '/dev/xvdg',
-    '/dev/sdh' : '/dev/xvdh',
-    '/dev/sdi' : '/dev/xvdi',
-    '/dev/sdj' : '/dev/xvdj',
-    '/dev/sdk' : '/dev/xvdk',
-    '/dev/sdl' : '/dev/xvdl',
-    '/dev/sdm' : '/dev/xvdm',
-    '/dev/sdn' : '/dev/xvdn',
-    '/dev/sdo' : '/dev/xvdo',
-    '/dev/sdp' : '/dev/xvdp',
-  },
+devices = {
+  '/dev/sdf' : '/dev/xvdf',
+  '/dev/sdg' : '/dev/xvdg',
+  '/dev/sdh' : '/dev/xvdh',
+  '/dev/sdi' : '/dev/xvdi',
+  '/dev/sdj' : '/dev/xvdj',
+  '/dev/sdk' : '/dev/xvdk',
+  '/dev/sdl' : '/dev/xvdl',
+  '/dev/sdm' : '/dev/xvdm',
+  '/dev/sdn' : '/dev/xvdn',
+  '/dev/sdo' : '/dev/xvdo',
+  '/dev/sdp' : '/dev/xvdp',
 }
+
+devicesAvailable = devices.copy()
 
 DEVNULL = open(os.devnull, 'w')
 
@@ -69,7 +54,7 @@ ec2api = boto.ec2.connect_to_region(ec2instance['region'])
 
 
 #
-# verify we can/should mount
+# verify we can/should attach
 #
 
 mounted = False
@@ -88,7 +73,8 @@ for volume in volumes:
   if cliargs.volumeid == volume.id:
     mounted = volume
 
-  devices = filter(lambda a: a != volume.attach_data.device, devices)
+  if volume.attach_data.device.encode('ascii','ignore') in devicesAvailable:
+    del devicesAvailable[volume.attach_data.device.encode('ascii','ignore')]
 
 if cliargs.verbose > 0:
   sys.stderr.write('enumerated volumes\n')
@@ -100,14 +86,10 @@ if cliargs.verbose > 0:
 
 if 'attach' == cliargs.action:
   if False == mounted:
-    device = random.choice(devices)
-    remapdevice = devicesRemap[cliargs.remap_device][device]
-
-    if cliargs.verbose > 2:
-      sys.stderr.write('remapping aws %s to local %s\n' % ( device, remapdevice ))
+    device = random.choice(list(devicesAvailable.keys()))
 
     if cliargs.verbose > 1:
-      sys.stderr.write('physically mounting (%s)...\n' % device)
+      sys.stderr.write('attaching (%s)...\n' % device)
 
     ec2api.attach_volume(cliargs.volumeid, ec2instance['instanceId'], device)
 
@@ -122,26 +104,25 @@ if 'attach' == cliargs.action:
     # just because aws says it's available, doesn't mean the os sees it yet
 
     while True:
-      if 0 == subprocess.call('lsblk | grep disk | grep ^`basename "%s"`' % remapdevice, shell=True, stdout=TASK_STDOUT, stderr=TASK_STDERR):
+      if 0 == subprocess.call('lsblk | grep disk | grep ^`basename "%s"`' % devices[device], shell=True, stdout=TASK_STDOUT, stderr=TASK_STDERR):
         break
 
       time.sleep(2)
 
     if cliargs.verbose > 0:
-      sys.stderr.write('physically mounted (%s)\n' % device)
+      sys.stderr.write('attached (%s)\n' % device)
   else:
-    device = mounted.attach_data.device
-    remapdevice = devicesRemap[cliargs.remap_device][device]
+    device = mounted.attach_data.device.encode('ascii','ignore')
 
   if None != cliargs.env_file:
     f = open(cliargs.env_file, 'w')
-    f.write('%sDEVICE=%s\n' % ( cliargs.env_prefix, remapdevice ))
+    f.write('%sDEVICE=%s\n' % ( cliargs.env_prefix, devices[device] ))
     f.close()
 
 elif 'detach' == cliargs.action:
   if False != mounted:
     if cliargs.verbose > 1:
-      sys.stderr.write('physically unmounting (%s)...\n' % mounted.attach_data.device)
+      sys.stderr.write('detaching (%s)...\n' % mounted.attach_data.device)
 
     ec2api.detach_volume(mounted.id)
 
@@ -154,4 +135,4 @@ elif 'detach' == cliargs.action:
       time.sleep(2)
 
     if cliargs.verbose > 0:
-      sys.stderr.write('physically unmounted (%s)\n' % mounted.attach_data.device)
+      sys.stderr.write('detached (%s)\n' % mounted.attach_data.device)

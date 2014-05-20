@@ -1,31 +1,39 @@
-Tool for managing drifting AWS EBS volumes.
+Tool for managing drifting volumes on AWS.
 
 
 ## Vagrant
 
+    AWS_VAGRANT_IAM_PROFILE_NAME=safetest \
     vagrant up --provider aws
 
 
 ## Example
 
+**create**
+
+    R0=$( aws --region us-east-1 ec2 create-volume --size 1 --availability-zone $( aws --region us-east-1 ec2 describe-instances --instance-id `cat .vagrant/machines/default/aws/id` | jq -r '.Reservations[0].Instances[0].Placement.AvailabilityZone' ) )
+    VOLUME_ID=$( echo "$R0" | jq -r '.VolumeId' )
+
 **attach**
 
-    sudo -E ./bin/run.py --remap-device ubuntu --env-file /tmp/mount.env -vvv attach vol-00f21745
+    vagrant ssh -c "cd /vagrant ; sudo -E ./bin/run.py --env-file /tmp/volume.env -vv attach '$VOLUME_ID'"
 
 **usage**
 
-    . /tmp/mount.env
-    mkdir -p /tmp/mountme
-    sudo mount $MOUNT_DEVICE /tmp/mountme
+    vagrant ssh -c ". /tmp/volume.env ; mkdir -p /tmp/mountme ; sudo mkfs -t ext4 \$MOUNT_DEVICE ; sudo mount \$MOUNT_DEVICE /tmp/mountme ; sudo chown ubuntu:ubuntu /tmp/mountme ; date >> /tmp/mountme/verify.txt ; cat /tmp/mountme/verify.txt ; sudo umount /tmp/mountme"
 
 **detach**
 
-    sudo -E ./bin/run.py -vvv detach vol-00f21745
+    vagrant ssh -c "cd /vagrant ; sudo -E ./bin/run.py -vv detach '$VOLUME_ID'"
+
+**destroy**
+
+    R1=$( aws --region us-east-1 ec2 delete-volume --volume-id "$VOLUME_ID" )
 
 
 ## Docker
 
-    sudo docker build -t dpb587/scs-drifter-volume-aws-ec2-ebs .
+    sudo docker build -t dpb587/drifter-volume-aws-ec2-ebs .
 
 
 ## systemd
@@ -34,8 +42,8 @@ Tool for managing drifting AWS EBS volumes.
 
     [Service]
     RemainAfterExit=yes
-    ExecStart=/usr/bin/docker run -v /media/drifter:/docker-mnt dpb587/scs-drifter-volume-aws-ec2-ebs --remap-device ubuntu --env-file /docker-mnt/vol00f21745.mount.env attach vol-00f21745
-    ExecStop=/usr/bin/docker run dpb587/scs-drifter-volume-aws-ec2-ebs detach vol-00f21745
+    ExecStart=/usr/bin/docker run -v /media/drifter:/docker-mnt dpb587/drifter-volume-aws-ec2-ebs --env-file /docker-mnt/vol00f21745.mount.env attach vol-00f21745
+    ExecStop=/usr/bin/docker run dpb587/drifter-volume-aws-ec2-ebs detach vol-00f21745
 
 
 **mount** - `media-vol00f21745.mount`

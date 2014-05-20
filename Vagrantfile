@@ -16,7 +16,14 @@ Vagrant.configure("2") do |config|
     aws.iam_instance_profile_name = ENV['AWS_VAGRANT_IAM_PROFILE_NAME']
     aws.instance_type = 'c3.large'
     aws.keypair_name = ENV['AWS_KEYPAIR_NAME']
-    aws.security_groups = [ 'vagrant' ]
+
+    if ENV['AWS_VAGRANT_SECURITY_GROUPS']
+      aws.security_groups = ENV['AWS_VAGRANT_SECURITY_GROUPS'].split(',')
+    else
+      aws.security_groups = [ 'vagrant' ]
+    end
+
+    aws.subnet_id = ENV['AWS_VAGRANT_SUBNET_ID']
 
     aws.tags = {
       'Environment' => 'dev',
