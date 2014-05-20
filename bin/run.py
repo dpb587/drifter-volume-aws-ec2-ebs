@@ -122,7 +122,7 @@ if 'attach' == cliargs.action:
     # just because aws says it's available, doesn't mean the os sees it yet
 
     while True:
-      if 0 == subprocess.call('/sbin/fdisk -l %s | /bin/grep "%s"' % ( remapdevice, remapdevice ), shell=True, stdout=TASK_STDOUT, stderr=TASK_STDERR):
+      if 0 == subprocess.call('lsblk | grep disk | grep ^`basename "%s"`' % remapdevice, shell=True, stdout=TASK_STDOUT, stderr=TASK_STDERR):
         break
 
       time.sleep(2)
