@@ -20,3 +20,13 @@ Tool for managing drifting AWS EBS volumes.
 **detach**
 
     sudo -E ./bin/run.py -vvv detach vol-00f21745
+
+
+## Docker
+
+    sudo docker build -t dpb587/scs-drifter-volume-aws-ec2-ebs .
+
+
+## License
+
+[MIT License](./LICENSE)
